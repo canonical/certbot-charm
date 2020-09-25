@@ -1,2 +1,5 @@
 /build/
 /certbot.charm
+
+__pycache__/
+.vscode/
