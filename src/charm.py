@@ -32,9 +32,16 @@ class CertbotCharm(CharmBase):
             self.on.get_dns_google_certificate_action,
             self._on_get_dns_google_certificate_action,
         )
+        self.framework.observe(
+            self.on.get_dns_route53_certificate_action,
+            self._on_get_dns_route53_certificate_action,
+        )
 
     def _on_install(self, _):
-        _host.install_packages("certbot", "python3-certbot-dns-google")
+        _host.install_packages(
+            "certbot",
+            "python3-certbot-dns-google",
+            "python3-certbot-dns-route53")
         _host.symlink(os.path.join(self.charm_dir, "bin/deploy.py"),
                       "/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
 
@@ -88,10 +95,19 @@ class CertbotCharm(CharmBase):
         except Exception as err:
             event.fail("cannot get certificate: {}".format(err))
 
+    def _on_get_dns_route53_certificate_action(self, event):
+        params = event.params
+        try:
+            self._get_certificate(plugin="dns-route53", **params)
+        except Exception as err:
+            event.fail("cannot get certificate: {}".format(err))
+
     def _get_certificate(self, **kwargs):
         plugin = kwargs.get("plugin") or self.model.config["plugin"]
         if plugin == "dns-google":
             self._get_certificate_dns_google(**kwargs)
+        elif plugin == "dns-route53":
+            self._get_certificate_dns_route53(**kwargs)
         elif not plugin:
             raise UnsupportedPluginError("plugin not specified")
         else:
@@ -115,6 +131,22 @@ class CertbotCharm(CharmBase):
             **kwargs
         )
 
+    def _get_certificate_dns_route53(self, **kwargs):
+        propagation = kwargs.get(
+            "propagation-seconds") or self.model.config["dns-route53-propagation-seconds"]
+        aws_access_key_id = kwargs.get(
+            "aws-access-key-id") or self.model.config["dns-route53-aws-access-key-id"]
+        aws_secret_access_key = kwargs.get(
+            "aws-secret-access-key") or self.model.config["dns-route53-aws-secret-access-key"]
+        kwargs["env"] = {
+            "AWS_ACCESS_KEY_ID": aws_access_key_id,
+            "AWS_SECRET_ACCESS_KEY": aws_secret_access_key,
+        }
+        self._run_certbot(
+            "--dns-route53-propagation-seconds={}".format(propagation),
+            **kwargs
+        )
+
     def _run_certbot(self, *args, **kwargs):
         cmd = ["certbot", "certonly", "-n", "--no-eff-email"]
         plugin = kwargs.get("plugin") or self.model.config["plugin"]
@@ -129,7 +161,7 @@ class CertbotCharm(CharmBase):
             cmd.append("--domains={}".format(domains))
         if args:
             cmd.extend(args)
-        _host.run(cmd)
+        _host.run(cmd, env=kwargs.get("env"))
 
     def _config_path(self, filename):
         return os.path.join("/etc/certbot-charm", filename)

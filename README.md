@@ -32,6 +32,29 @@ $ juju run-action --wait certbot/0 get-dns-google-certificate \
     email=webmaster@example.com
 ```
 
+### DNS-Route53 Plugin
+
+Certbot's dns-route53 plugin uses the AWS Route53 API to prove
+ownership of the requested domain. Documentation for the plugin can be
+found at https://certbot-dns-route53.readthedocs.io/en/stable/. This
+plugin requires API credentials to be supplied either through the
+`aws-access-key-id` and `aws-secret-access-key` parameters on the
+`get-dns-route53-certificate` action, or from the
+`dns-route53-aws-access-key-id` and `dns-route63-aws-secret-access-key`
+settings in the charm configuration.
+
+To acquire a certificate using this plugin run a command like the
+following:
+
+```
+$ juju run-action --wait certbot/0 get-dns-route53-certificate \
+    agree-tos=true \
+    aws-access-key-id=ABCDEFGHIJKLMNOPQRST \
+    aws-secret-access-key=YcdqUfSGwvmIJAhjWNzGxSifdXr78RRqZrMnPxoz \    
+    domains=example.com \
+    email=webmaster@example.com
+```
+
 ## Integrating With Web-Servers
 
 ### HAProxy
