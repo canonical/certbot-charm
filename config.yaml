@@ -1,10 +1,68 @@
-# Copyright 2020 Martin Hilton
+# Copyright 2020 Canonical Ltd
 # See LICENSE file for licensing details.
-#
-# This is only an example, and you should edit to suit your needs.
-# If you don't need config, you can remove the file entirely.
 options:
-  thing:
-    default: 🎁
-    description: A thing used by the charm.
+  agree-tos:
+    default: false
+    description: |
+      Agree to the terms-of-service. If using Let's Encrypt these can be
+      found at https://letsencrypt.org/repository/
+    type: boolean
+  cert-path:
+    default: ""
+    description: Path to which the certificate will be copied.
+    type: string
+  chain-path:
+    default: ""
+    description: Path to which the certificate chain will be copied.
+    type: string
+  combined-path:
+    default: ""
+    description: |
+      Path to which the combined full certificate chain and private key
+      will be copied.
+    type: string
+  deploy-command:
+    default: ""
+    description: |
+      Command to run to deploy a certificate following a successful
+      acquisition or renewal.
+    type: string
+  dns-google-credentials:
+    default: ""
+    description: |
+      Base64 encoded credential file used by the dns-google plugin to
+      access the DNS system. For details of this file please see
+      https://certbot-dns-google.readthedocs.io/en/stable/#credentials
+    type: string
+  dns-google-propagation-seconds:
+    default: 60
+    description: |
+      The number of seconds to wait for DNS to propagate before asking
+      the ACME server to verify the DNS record.
+    type: int
+  domains:
+    default: ""
+    description: |
+      The domains to create the certificate for. This comma-separated
+      list contains all the domains to add to the certificate. The first
+      domain will be the subject of the certificate. Any additional
+      names will be added to the certificate as alternative names.
+    type: string
+  email:
+    default: ""
+    description: Email address to register the certificates under.
+    type: string
+  fullchain-path:
+    default: ""
+    description: Path to which the full certificate chain will be copied.
+    type: string
+  key-path:
+    default: ""
+    description: Path to which the private key will be copied.
+    type: string
+  plugin:
+    default: ""
+    description: |
+      The authenticator plugin to use to obtain (and renew) the
+      ceritificate. The currently supported plugins are dns-google. 
     type: string
