@@ -1,10 +1,16 @@
-# Copyright 2020 Martin Hilton
+# Copyright 2020 Canonical Ltd
 # See LICENSE file for licensing details.
 name: certbot
 description: |
-  TODO: fill out the charm's description
+  Acquire certificates from Let's Encrypt and manage them for use by
+  related charms.
 summary: |
-  TODO: fill out the charm's summary
-series: [focal, bionic]
-
-
+  ACME certificate manager.
+subordinate: true
+series:
+  - focal
+  - bionic
+requires:
+  juju-info:
+    interface: juju-info
+    scope: container
