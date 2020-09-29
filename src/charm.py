@@ -33,14 +33,7 @@ class CertbotCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.stop, self._on_stop)
-        self.framework.observe(
-            self.on.get_dns_google_certificate_action,
-            self._on_get_dns_google_certificate_action,
-        )
-        self.framework.observe(
-            self.on.get_dns_route53_certificate_action,
-            self._on_get_dns_route53_certificate_action,
-        )
+        self.framework.observe(self.on.get_certificate_action, self._on_get_certificate_action)
 
     def _on_install(self, _):
         """Handler for the install hook."""
@@ -92,26 +85,31 @@ class CertbotCharm(CharmBase):
         """Handler for the stop hook."""
         _host.unlink("/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
 
-    def _on_get_dns_google_certificate_action(self, event):
-        """Implementation of the get-dns-google-certificate action."""
+    def _on_get_certificate_action(self, event):
+        """Implementation of the get-certificate action."""
         params = event.params
+        credpath = self._config_path("action-{}.cred".format(os.environ["JUJU_ACTION_UUID"]))
         if params.get("credentials"):
             try:
-                path = self._config_path("dns-google-action.json")
-                self._write_base64(path,
-                                   event.params["credentials"])
-                params["credentials-path"] = path
+                self._write_base64(credpath, event.params["credentials"])
+                params["credentials-path"] = credpath
             except (ValueError, binascii.Error) as err:
                 event.fail("invalid credentials: {}".format(err))
                 return
         try:
-            self._get_certificate("dns-google",
+            self._get_certificate(params.get("plugin", self.model.config["plugin"]),
                                   params.get("agree-tos", self.model.config["agree-tos"]),
                                   params.get("email", self.model.config["email"]),
                                   params.get("domains", self.model.config["domains"]),
                                   params)
         except Exception as err:
             event.fail("cannot get certificate: {}".format(err))
+            # try and clean up any credentials as they won't be needed
+            if _host.exists(credpath):
+                try:
+                    _host.unlink(credpath)
+                except Exception:
+                    pass
 
     def _dns_google_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
         """Calculate arguments for the dns-google plugin.
@@ -122,23 +120,11 @@ class CertbotCharm(CharmBase):
         """
         path = params.get("credentials-path", self._config_path("dns-google.json"))
         propagation = params.get("propagation-seconds",
-                                 self.model.config["dns-google-propagation-seconds"])
+                                 self.model.config["propagation-seconds"])
         return [
             "--dns-google-credentials={}".format(path),
             "--dns-google-propagation-seconds={}".format(propagation),
         ], None
-
-    def _on_get_dns_route53_certificate_action(self, event):
-        """Implementation of the get-dns-reoute53-certificate action."""
-        params = event.params
-        try:
-            self._get_certificate("dns-route53",
-                                  params.get("agree-tos", self.model.config["agree-tos"]),
-                                  params.get("email", self.model.config["email"]),
-                                  params.get("domains", self.model.config["domains"]),
-                                  params)
-        except Exception as err:
-            event.fail("cannot get certificate: {}".format(err))
 
     def _dns_route53_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
         """Calculate arguments for the dns-route53 plugin.
@@ -148,7 +134,7 @@ class CertbotCharm(CharmBase):
               arguments or environment variables.
         """
         propagation = params.get("propagation-seconds",
-                                 self.model.config["dns-route53-propagation-seconds"])
+                                 self.model.config["propagation-seconds"])
         aws_access_key_id = params.get(
             "aws-access-key-id", self.model.config["dns-route53-aws-access-key-id"])
         aws_secret_access_key = params.get(
@@ -181,13 +167,9 @@ class CertbotCharm(CharmBase):
               by this charm.
 
         """
-        plugins = {
-            "dns-google": self._dns_google_args,
-            "dns-route53": self._dns_route53_args,
-        }
         try:
-            args, env = plugins[plugin](params)
-        except KeyError:
+            args, env = getattr(self, "_{}_args".format(plugin.replace("-", "_")))(params)
+        except (AttributeError, TypeError):
             raise UnsupportedPluginError('plugin "{}" not supported'.format(plugin))
 
         self._run_certbot(plugin, agree_tos, email, domains, args, env)
@@ -246,7 +228,11 @@ class Host:
     def __init__(self, *args):
         super().__init__(*args)
 
-    def install_packages(self, packages):
+    def exists(self, path: str):
+        """Wrapper for os.path.exists."""
+        return os.path.exists(path)
+
+    def install_packages(self, packages: List[str]):
         """Install apt packages.
 
         Args:

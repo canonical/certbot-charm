@@ -18,18 +18,19 @@ Certbot's dns-google plugin uses the Google Cloud DNS API to prove
 ownership of the requested domain. Documentation for the plugin can be
 found at https://certbot-dns-google.readthedocs.io/en/stable/. This
 plugin requires API credentials to be supplied either through the
-`credentials` parameter on the `get-dns-google-certificate` action, or
-from the `dns-google-credentials` setting in the charm configuration.
+`credentials` parameter on the `get-certificate` action, or from the
+`dns-google-credentials` setting in the charm configuration.
 
 To acquire a certificate using this plugin run a command like the
 following:
 
 ```
-$ juju run-action --wait certbot/0 get-dns-google-certificate \
+$ juju run-action --wait certbot/0 get-certificate \
     agree-tos=true \
     credentials=`cat cred.json | base64 -w0` \
     domains=example.com \
-    email=webmaster@example.com
+    email=webmaster@example.com \
+    plugin=dns-google
 ```
 
 ### DNS-Route53 Plugin
@@ -39,20 +40,21 @@ ownership of the requested domain. Documentation for the plugin can be
 found at https://certbot-dns-route53.readthedocs.io/en/stable/. This
 plugin requires API credentials to be supplied either through the
 `aws-access-key-id` and `aws-secret-access-key` parameters on the
-`get-dns-route53-certificate` action, or from the
-`dns-route53-aws-access-key-id` and `dns-route63-aws-secret-access-key`
-settings in the charm configuration.
+`get-certificate` action, or from the `dns-route53-aws-access-key-id`
+and `dns-route63-aws-secret-access-key` settings in the charm
+configuration.
 
 To acquire a certificate using this plugin run a command like the
 following:
 
 ```
-$ juju run-action --wait certbot/0 get-dns-route53-certificate \
+$ juju run-action --wait certbot/0 get-certificate \
     agree-tos=true \
     aws-access-key-id=ABCDEFGHIJKLMNOPQRST \
     aws-secret-access-key=YcdqUfSGwvmIJAhjWNzGxSifdXr78RRqZrMnPxoz \    
     domains=example.com \
-    email=webmaster@example.com
+    email=webmaster@example.com \
+    plugin=dns-route53
 ```
 
 ## Integrating With Web-Servers
