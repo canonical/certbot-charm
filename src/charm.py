@@ -8,6 +8,7 @@ import configparser
 import logging
 import os
 import subprocess
+from typing import Any, List, Mapping, Tuple
 
 from ops.charm import CharmBase
 from ops.main import main
@@ -18,10 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 class UnsupportedPluginError(Exception):
+    """Raised when an attempt is made to acquire a certificate using
+    an unsupported plugin."""
     pass
 
 
 class CertbotCharm(CharmBase):
+    """Class that implements the certbot charm."""
+
     def __init__(self, *args):
         super().__init__(*args)
         self.framework.observe(self.on.install, self._on_install)
@@ -38,14 +43,16 @@ class CertbotCharm(CharmBase):
         )
 
     def _on_install(self, _):
-        _host.install_packages(
+        """Handler for the install hook."""
+        _host.install_packages([
             "certbot",
             "python3-certbot-dns-google",
-            "python3-certbot-dns-route53")
+            "python3-certbot-dns-route53"])
         _host.symlink(os.path.join(self.charm_dir, "bin/deploy.py"),
                       "/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
 
     def _on_config_changed(self, _):
+        """Handler for the config-changed hook."""
         _host.write_config(
             self._config_path("config.ini"),
             {
@@ -68,18 +75,25 @@ class CertbotCharm(CharmBase):
             logger.exception("invalid dns-google-credentials value")
 
     def _on_start(self, _):
+        """Handler for the start hook."""
         self.model.unit.status = BlockedStatus("certificate not yet acquired.")
         try:
             # attempt to get a certificate using the defaults, don't
             # worry if it fails.
-            self._get_certificate()
+            self._get_certificate(
+                self.model.config["plugin"],
+                self.model.config["agree-tos"],
+                self.model.config["email"],
+                self.model.config["domains"])
         except Exception as err:
             logger.info("could not automatically acquire certificate", exc_info=err)
 
     def _on_stop(self, _):
+        """Handler for the stop hook."""
         _host.unlink("/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
 
     def _on_get_dns_google_certificate_action(self, event):
+        """Implementation of the get-dns-google-certificate action."""
         params = event.params
         if params.get("credentials"):
             try:
@@ -91,29 +105,93 @@ class CertbotCharm(CharmBase):
                 event.fail("invalid credentials: {}".format(err))
                 return
         try:
-            self._get_certificate(plugin="dns-google", **params)
+            self._get_certificate("dns-google",
+                                  params.get("agree-tos", self.model.config["agree-tos"]),
+                                  params.get("email", self.model.config["email"]),
+                                  params.get("domains", self.model.config["domains"]),
+                                  params)
         except Exception as err:
             event.fail("cannot get certificate: {}".format(err))
+
+    def _dns_google_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
+        """Calculate arguments for the dns-google plugin.
+
+        Args:
+            params: Plugin-specific parameters that will be converted to
+              arguments or environment variables.
+        """
+        path = params.get("credentials-path", self._config_path("dns-google.json"))
+        propagation = params.get("propagation-seconds",
+                                 self.model.config["dns-google-propagation-seconds"])
+        return [
+            "--dns-google-credentials={}".format(path),
+            "--dns-google-propagation-seconds={}".format(propagation),
+        ], None
 
     def _on_get_dns_route53_certificate_action(self, event):
+        """Implementation of the get-dns-reoute53-certificate action."""
         params = event.params
         try:
-            self._get_certificate(plugin="dns-route53", **params)
+            self._get_certificate("dns-route53",
+                                  params.get("agree-tos", self.model.config["agree-tos"]),
+                                  params.get("email", self.model.config["email"]),
+                                  params.get("domains", self.model.config["domains"]),
+                                  params)
         except Exception as err:
             event.fail("cannot get certificate: {}".format(err))
 
-    def _get_certificate(self, **kwargs):
-        plugin = kwargs.get("plugin") or self.model.config["plugin"]
-        if plugin == "dns-google":
-            self._get_certificate_dns_google(**kwargs)
-        elif plugin == "dns-route53":
-            self._get_certificate_dns_route53(**kwargs)
-        elif not plugin:
-            raise UnsupportedPluginError("plugin not specified")
-        else:
-            raise UnsupportedPluginError("{} plugin not supported".format(plugin))
+    def _dns_route53_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
+        """Calculate arguments for the dns-route53 plugin.
 
-        domains = kwargs.get("domains") or self.model.config["domains"]
+        Args:
+            params: Plugin-specific parameters that will be converted to
+              arguments or environment variables.
+        """
+        propagation = params.get("propagation-seconds",
+                                 self.model.config["dns-route53-propagation-seconds"])
+        aws_access_key_id = params.get(
+            "aws-access-key-id", self.model.config["dns-route53-aws-access-key-id"])
+        aws_secret_access_key = params.get(
+            "aws-secret-access-key", self.model.config["dns-route53-aws-secret-access-key"])
+        return [
+            "--dns-route53-propagation-seconds={}".format(propagation),
+        ], {
+            "AWS_ACCESS_KEY_ID": aws_access_key_id,
+            "AWS_SECRET_ACCESS_KEY": aws_secret_access_key,
+        }
+
+    def _get_certificate(self, plugin: str, agree_tos: bool, email: str, domains: str,
+                         params: dict = {}) -> None:
+        """Get and install a certificate.
+
+        Use certbot to acquire a new certificate and run the charm's
+        deploy script to install the certificate to the configured
+        locations.
+
+        Args:
+            plugin: Name of the plugin to use to acquire the certificate.
+            agree_tos: Agree to the the terms-of-service of the ACME server.
+            email: Email address to assocaite with the certificate.
+            domains: Comma separated list of domains the certificate is for.
+            params: Additional plugin-specific parameters needed to
+              retrieve the certificate.
+
+        Raises:
+            UnsupportedPluginError: The requested plugin is not supported
+              by this charm.
+
+        """
+        plugins = {
+            "dns-google": self._dns_google_args,
+            "dns-route53": self._dns_route53_args,
+        }
+        try:
+            args, env = plugins[plugin](params)
+        except KeyError:
+            raise UnsupportedPluginError('plugin "{}" not supported'.format(plugin))
+
+        self._run_certbot(plugin, agree_tos, email, domains, args, env)
+
         domain = domains.split(",")[0]
         cmd = ["/etc/letsencrypt/renewal-hooks/deploy/certbot-charm"]
         env = dict(os.environ)
@@ -121,69 +199,82 @@ class CertbotCharm(CharmBase):
         _host.run(cmd, env=env)
         self.model.unit.status = ActiveStatus("maintaining certificate for {}.".format(domain))
 
-    def _get_certificate_dns_google(self, **kwargs):
-        propagation = kwargs.get(
-            "propagation-seconds") or self.model.config["dns-google-propagation-seconds"]
-        path = kwargs.get("credentials-path") or self._config_path("dns-google.json")
-        self._run_certbot(
-            "--dns-google-credentials={}".format(path),
-            "--dns-google-propagation-seconds={}".format(propagation),
-            **kwargs
-        )
+    def _run_certbot(self, plugin: str, agree_tos: bool, email: str, domains: str,
+                     args: List[str] = None, env: Mapping[str, str] = None) -> None:
+        """Run the certbot command.
 
-    def _get_certificate_dns_route53(self, **kwargs):
-        propagation = kwargs.get(
-            "propagation-seconds") or self.model.config["dns-route53-propagation-seconds"]
-        aws_access_key_id = kwargs.get(
-            "aws-access-key-id") or self.model.config["dns-route53-aws-access-key-id"]
-        aws_secret_access_key = kwargs.get(
-            "aws-secret-access-key") or self.model.config["dns-route53-aws-secret-access-key"]
-        kwargs["env"] = {
-            "AWS_ACCESS_KEY_ID": aws_access_key_id,
-            "AWS_SECRET_ACCESS_KEY": aws_secret_access_key,
-        }
-        self._run_certbot(
-            "--dns-route53-propagation-seconds={}".format(propagation),
-            **kwargs
-        )
+        Runs a non-interactive certbot certonly command.
 
-    def _run_certbot(self, *args, **kwargs):
+        Args:
+            plugin: Name of the plugin to use to acquire the certificate.
+            agree_tos: Agree to the the terms-of-service of the ACME server.
+            email: Email address to assocaite with the certificate.
+            domains: Comma separated list of domains the certificate is for.
+            args: Additional, plugin-specific, arguments to add to the
+              certbot command.
+            env: Environment variables to set in the cerbot command.
+        """
         cmd = ["certbot", "certonly", "-n", "--no-eff-email"]
-        plugin = kwargs.get("plugin") or self.model.config["plugin"]
         cmd.append("--{}".format(plugin))
-        if kwargs.get("agree-tos") or self.model.config["agree-tos"]:
+        if agree_tos:
             cmd.append("--agree-tos")
-        email = kwargs.get("email") or self.model.config["email"]
         if email:
             cmd.append("--email={}".format(email))
-        domains = kwargs.get("domains") or self.model.config["domains"]
         if domains:
             cmd.append("--domains={}".format(domains))
         if args:
             cmd.extend(args)
-        _host.run(cmd, env=kwargs.get("env"))
+        _host.run(cmd, env=env)
 
-    def _config_path(self, filename):
+    def _config_path(self, filename: str) -> str:
+        """Calculate the location where the charm's configuration files
+        should be stored."""
         return os.path.join("/etc/certbot-charm", filename)
 
-    def _write_base64(self, path, b64, mode=0o600):
+    def _write_base64(self, path: str, b64: str, mode: int = 0o600):
+        """Decode the base64 string and write to a file."""
         _host.write_file(path, base64.b64decode(b64), mode=mode)
 
 
 class Host:
+    """Interface into the host machine.
+
+    This interface is used to make changes on the host machine on behalf
+    of the charm. This class can be easily mocked for tests.
+    """
+
     def __init__(self, *args):
         super().__init__(*args)
 
-    def install_packages(self, *packages):
+    def install_packages(self, packages):
+        """Install apt packages.
+
+        Args:
+            packages: List of packages to install.
+        """
         self.run(["apt-get", "update", "-q"])
         cmd = ["apt-get", "install", "-q", "-y"]
         cmd.extend(packages)
         self.run(cmd)
 
     def run(self, *args, **kwargs):
+        """Run a subcommand.
+
+        This is a wrapper for subprocess.run.
+        """
         subprocess.run(*args, **kwargs)
 
-    def symlink(self, src, dst):
+    def symlink(self, src: str, dst: str):
+        """Create, or update a symbolic link.
+
+        Ensure there is a symbolic link from src to dst. If dst already
+        exists the current file will be overwritten. Any required
+        directories will be created for dst.
+
+        Args:
+            src: The path to link to.
+            dst: The path of the new file.
+        """
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         try:
             os.symlink(src, dst)
@@ -191,14 +282,33 @@ class Host:
             os.remove(dst)
             os.symlink(src, dst)
 
-    def unlink(self, path):
+    def unlink(self, path: str):
+        """Remove a file.
+
+        Removes the specified file, it is not an error if the file does
+        not exist.
+
+        Args:
+            path: File to remove.
+        """
         try:
             os.unlink(path)
         except FileNotFoundError:
             # If the file doesn't exist then that's what we want.
             pass
 
-    def write_config(self, path, config, mode=0o600):
+    def write_config(self, path: str, config: Mapping[str, Mapping[str, Any]], mode: int = 0o600):
+        """Write configuration to file.
+
+        Load the configuration file from the given path, if it exists.
+        Update the configuration with the given config. Then write the
+        configuration back to the given path.
+
+        Args:
+            path: Location of the config file.
+            config: The configuration settings to set.
+            mode: Permissions to apply to the after writing it.
+        """
         cp = configparser.ConfigParser()
         cp.read(path)
         for section, values in config.items():
@@ -212,7 +322,14 @@ class Host:
             cp.write(f)
         os.chmod(path, mode)
 
-    def write_file(self, path, content, mode=0o600):
+    def write_file(self, path: str, content: bytes, mode: int = 0o600):
+        """Write a binary file.
+
+        Args:
+            path: Location of the config file.
+            content: The bytes to write to the file.
+            mode: Permissions to apply to the after writing it.
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(content)
