@@ -19,4 +19,4 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
     - name: Run Tests
-      run: ./run-tests
+      run: ./run_tests
