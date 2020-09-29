@@ -1,5 +1,16 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
+deploy:
+  description: Run the post-renew deploy hook for a domain.
+  params:
+    domain:
+      description: |
+        Domain to run the deploy hook for, this must be the primary
+        domain on a certificate that has already been acquired by this
+        unit.
+      type: string
+    required: ["domain"]
+
 get-certificate:
   description: Acquire a certificate from an ACME service.
   params:

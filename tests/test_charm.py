@@ -94,6 +94,17 @@ class TestCharm(unittest.TestCase):
         charm._host.unlink.assert_called_once_with(
             "/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
 
+    def test_deploy_action(self):
+        charm._host = Mock()
+        harness = Harness(charm.CertbotCharm)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        event = Mock(params={"domain": "example.com"})
+        harness.charm._on_deploy_action(event)
+        charm._host.run.assert_called_once_with(
+            ["/etc/letsencrypt/renewal-hooks/deploy/certbot-charm"],
+            env={"RENEWED_LINEAGE": "/etc/letsencrypt/live/example.com"})
+
     def test_get_certificate_action_dns_google(self):
         os.environ["JUJU_ACTION_UUID"] = "1"
         charm._host = Mock()

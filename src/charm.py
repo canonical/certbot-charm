@@ -33,6 +33,7 @@ class CertbotCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.stop, self._on_stop)
+        self.framework.observe(self.on.deploy_action, self._on_deploy_action)
         self.framework.observe(self.on.get_certificate_action, self._on_get_certificate_action)
 
     def _on_install(self, _):
@@ -84,6 +85,13 @@ class CertbotCharm(CharmBase):
     def _on_stop(self, _):
         """Handler for the stop hook."""
         _host.unlink("/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
+
+    def _on_deploy_action(self, event):
+        """Implmentation of the deploy action."""
+        try:
+            self._deploy(event.params["domain"])
+        except Exception as err:
+            event.fail("cannot run deploy hook: {}".format(err))
 
     def _on_get_certificate_action(self, event):
         """Implementation of the get-certificate action."""
@@ -175,11 +183,20 @@ class CertbotCharm(CharmBase):
         self._run_certbot(plugin, agree_tos, email, domains, args, env)
 
         domain = domains.split(",")[0]
-        cmd = ["/etc/letsencrypt/renewal-hooks/deploy/certbot-charm"]
-        env = dict(os.environ)
-        env["RENEWED_LINEAGE"] = os.path.join("/etc/letsencrypt/live", domain)
-        _host.run(cmd, env=env)
+        self._deploy(domain)
         self.model.unit.status = ActiveStatus("maintaining certificate for {}.".format(domain))
+
+    def _deploy(self, domain: str) -> None:
+        """Run the deploy hook.
+
+        Args:
+            domain: primary domain of the certificate to run the hook for.
+        """
+        cmd = ["/etc/letsencrypt/renewal-hooks/deploy/certbot-charm"]
+        env = {
+            "RENEWED_LINEAGE": os.path.join("/etc/letsencrypt/live", domain),
+        }
+        _host.run(cmd, env=env)
 
     def _run_certbot(self, plugin: str, agree_tos: bool, email: str, domains: str,
                      args: List[str] = None, env: Mapping[str, str] = None) -> None:
