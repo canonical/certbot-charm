@@ -22,8 +22,10 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.charm.on.install.emit()
-        charm._host.install_packages.assert_called_once_with(
-            "certbot", "python3-certbot-dns-google", "python3-certbot-dns-route53")
+        charm._host.install_packages.assert_called_once_with([
+            "certbot",
+            "python3-certbot-dns-google",
+            "python3-certbot-dns-route53"])
         charm._host.symlink.assert_called_once_with(
             os.path.join(harness.charm.charm_dir, "bin/deploy.py"),
             "/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
@@ -240,7 +242,7 @@ class TestCharm(unittest.TestCase):
         harness.begin()
         harness.update_config(self._config(harness.charm))
         with self.assertRaises(charm.UnsupportedPluginError):
-            harness.charm._get_certificate()
+            harness.charm._get_certificate("", False, "", "")
 
     def test_get_certificate_unknown_plugin(self):
         charm._host = Mock()
@@ -249,7 +251,7 @@ class TestCharm(unittest.TestCase):
         harness.begin()
         harness.update_config(self._config(harness.charm))
         with self.assertRaises(charm.UnsupportedPluginError):
-            harness.charm._get_certificate(plugin="no-such-plugin")
+            harness.charm._get_certificate("no-such-plugin", False, "", "")
 
     def test_run_certbot_nothing_set(self):
         charm._host = Mock()
@@ -257,25 +259,9 @@ class TestCharm(unittest.TestCase):
         self.addCleanup(harness.cleanup)
         harness.begin()
         harness.update_config(self._config(harness.charm))
-        harness.charm._run_certbot(plugin="test")
+        harness.charm._run_certbot("test", False, "", "")
         charm._host.run.assert_called_once_with(
             ["certbot", "certonly", "-n", "--no-eff-email", "--test"], env=None)
-
-    def test_run_certbot_charm_config(self):
-        charm._host = Mock()
-        harness = Harness(charm.CertbotCharm)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        config = {
-            "agree-tos": True,
-            "domains": "charm.example.com,www.charm.example.com",
-            "email": "webmaster@charm.example.com"}
-        harness.update_config(self._config(harness.charm, **config))
-        harness.charm._run_certbot(plugin="test")
-        charm._host.run.assert_called_once_with(
-            ["certbot", "certonly", "-n", "--no-eff-email", "--test", "--agree-tos",
-             "--email=webmaster@charm.example.com",
-             "--domains=charm.example.com,www.charm.example.com"], env=None)
 
     def test_run_certbot_params(self):
         charm._host = Mock()
@@ -287,17 +273,15 @@ class TestCharm(unittest.TestCase):
             "domains": "charm.example.com,www.charm.example.com",
             "email": "webmaster@charm.example.com"}
         harness.update_config(self._config(harness.charm, **config))
-        kwargs = {
-            "plugin": "test",
-            "agree-tos": True,
-            "domains": "params.example.com,www.params.example.com",
-            "email": "webmaster@params.example.com",
-            "env": {"ENV1": "e1", "ENV2": "e2"}}
-        harness.charm._run_certbot(**kwargs)
+        harness.charm._run_certbot(
+            "test", True, "webmaster@params.example.com",
+            "params.example.com,www.params.example.com",
+            ["--extra-1", "--extra-2"], {"ENV1": "e1", "ENV2": "e2"})
         charm._host.run.assert_called_once_with(
             ["certbot", "certonly", "-n", "--no-eff-email", "--test", "--agree-tos",
              "--email=webmaster@params.example.com",
-             "--domains=params.example.com,www.params.example.com"],
+             "--domains=params.example.com,www.params.example.com",
+             "--extra-1", "--extra-2"],
             env={"ENV1": "e1", "ENV2": "e2"})
 
     def _config(self, charm, **kwargs):
@@ -316,7 +300,7 @@ class TestHost(unittest.TestCase):
     def test_install_packages(self):
         h = charm.Host()
         h.run = Mock()
-        h.install_packages("pkg-a", "pkg-b", "pkg-c")
+        h.install_packages(["pkg-a", "pkg-b", "pkg-c"])
         self.assertEqual(h.run.call_args_list, [
             call(["apt-get", "update", "-q"]),
             call(["apt-get", "install", "-q", "-y", "pkg-a", "pkg-b", "pkg-c"]),
