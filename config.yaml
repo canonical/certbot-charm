@@ -9,17 +9,25 @@ options:
     type: boolean
   cert-path:
     default: ""
-    description: Path to which the certificate will be copied.
+    description: |
+      Path to which the certificate will be copied. If this path is an
+      existing directory then the certificate will be copied into a file
+      named <domain>.crt in that directory.
     type: string
   chain-path:
     default: ""
-    description: Path to which the certificate chain will be copied.
+    description: |
+      Path to which the certificate chain will be copied. If this path
+      is an existing directory then the certificate chain will be copied
+      into a file named <domain>_chain.pem in that directory.
     type: string
   combined-path:
     default: ""
     description: |
       Path to which the combined full certificate chain and private key
-      will be copied.
+      will be copied. If this path is an existing directory then the
+      combined full certificate chain and key will be copied into a file
+      named <domain>.pem in that directory.
     type: string
   deploy-command:
     default: ""
@@ -62,11 +70,18 @@ options:
     type: string
   fullchain-path:
     default: ""
-    description: Path to which the full certificate chain will be copied.
+    description: |
+      Path to which the full certificate chain will be copied. If this
+      path is an existing directory then the full certificate chain will
+      be copied into a file named <domain>_fullchain.pem in that
+      directory.
     type: string
   key-path:
     default: ""
-    description: Path to which the private key will be copied.
+    description: |
+      Path to which the private key will be copied. If this path is an
+      existing directory then the private key will be copied into a file
+      named <domain>.key in that directory.
     type: string
   plugin:
     default: ""
