@@ -94,7 +94,8 @@ class TestCharm(unittest.TestCase):
         charm._host.unlink.assert_called_once_with(
             "/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
 
-    def test_get_dns_google_certificate_action(self):
+    def test_get_certificate_action_dns_google(self):
+        os.environ["JUJU_ACTION_UUID"] = "1"
         charm._host = Mock()
         harness = Harness(charm.CertbotCharm)
         self.addCleanup(harness.cleanup)
@@ -105,21 +106,23 @@ class TestCharm(unittest.TestCase):
             "credentials": "AAAA",
             "domains": "action.example.com",
             "email": "webmaster@action.example.com",
-            "propagation-seconds": 30})
-        harness.charm._on_get_dns_google_certificate_action(event)
+            "propagation-seconds": 30,
+            "plugin": "dns-google"})
+        harness.charm._on_get_certificate_action(event)
         self.assertEqual(len(charm._host.run.call_args_list), 2)
         self.assertEqual(
             charm._host.run.call_args_list[0],
             call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-google", "--agree-tos",
                   "--email=webmaster@action.example.com", "--domains=action.example.com",
-                  "--dns-google-credentials=/etc/certbot-charm/dns-google-action.json",
+                  "--dns-google-credentials=/etc/certbot-charm/action-1.cred",
                   "--dns-google-propagation-seconds=30"], env=None))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
                          ["RENEWED_LINEAGE"], "/etc/letsencrypt/live/action.example.com")
 
-    def test_get_dns_google_certificate_action_defaults(self):
+    def test_get_certificate_action_dns_google_defaults(self):
+        os.environ["JUJU_ACTION_UUID"] = "1"
         charm._host = Mock()
         harness = Harness(charm.CertbotCharm)
         self.addCleanup(harness.cleanup)
@@ -127,12 +130,13 @@ class TestCharm(unittest.TestCase):
         config = {
             "agree-tos": True,
             "dns-google-credentials": "AAAA",
-            "dns-google-propagation-seconds": 40,
             "domains": "charm.example.com",
-            "email": "webmaster@charm.example.com"}
+            "email": "webmaster@charm.example.com",
+            "plugin": "dns-google",
+            "propagation-seconds": 40}
         harness.update_config(self._config(harness.charm, **config))
         event = Mock(params={})
-        harness.charm._on_get_dns_google_certificate_action(event)
+        harness.charm._on_get_certificate_action(event)
         self.assertEqual(len(charm._host.run.call_args_list), 2)
         self.assertEqual(
             charm._host.run.call_args_list[0],
@@ -145,7 +149,8 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
                          ["RENEWED_LINEAGE"], "/etc/letsencrypt/live/charm.example.com")
 
-    def test_get_dns_google_certificate_action_fail(self):
+    def test_get_certificate_action_fail(self):
+        os.environ["JUJU_ACTION_UUID"] = "1"
         charm._host = Mock()
         harness = Harness(charm.CertbotCharm)
         self.addCleanup(harness.cleanup)
@@ -156,13 +161,16 @@ class TestCharm(unittest.TestCase):
             "credentials": "AAAA",
             "domains": "action.example.com",
             "email": "webmaster@action.example.com",
+            "plugin": "dns-google",
             "propagation-seconds": 30})
         charm._host.run.side_effect = subprocess.CalledProcessError(1, "certbot")
-        harness.charm._on_get_dns_google_certificate_action(event)
+        charm._host.exists.return_value = True
+        harness.charm._on_get_certificate_action(event)
         event.fail.assert_called_once_with(
             "cannot get certificate: Command 'certbot' returned non-zero exit status 1.")
+        charm._host.unlink.assert_called_once_with("/etc/certbot-charm/action-1.cred")
 
-    def test_get_dns_route53_certificate_action(self):
+    def test_get_certificate_action_dns_route53(self):
         charm._host = Mock()
         harness = Harness(charm.CertbotCharm)
         self.addCleanup(harness.cleanup)
@@ -174,8 +182,9 @@ class TestCharm(unittest.TestCase):
             "aws-secret-access-key": "test-secret-key",
             "domains": "action.example.com",
             "email": "webmaster@action.example.com",
+            "plugin": "dns-route53",
             "propagation-seconds": 30})
-        harness.charm._on_get_dns_route53_certificate_action(event)
+        harness.charm._on_get_certificate_action(event)
         self.assertEqual(len(charm._host.run.call_args_list), 2)
         expectCmd = [
             "certbot", "certonly", "-n", "--no-eff-email", "--dns-route53", "--agree-tos",
@@ -189,7 +198,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
                          ["RENEWED_LINEAGE"], "/etc/letsencrypt/live/action.example.com")
 
-    def test_get_dns_route53_certificate_action_defaults(self):
+    def test_get_certificate_action_dns_route53_defaults(self):
         charm._host = Mock()
         harness = Harness(charm.CertbotCharm)
         self.addCleanup(harness.cleanup)
@@ -198,12 +207,13 @@ class TestCharm(unittest.TestCase):
             "agree-tos": True,
             "dns-route53-aws-access-key-id": "test-key-id",
             "dns-route53-aws-secret-access-key": "test-secret-key",
-            "dns-route53-propagation-seconds": 40,
             "domains": "charm.example.com",
-            "email": "webmaster@charm.example.com"}
+            "email": "webmaster@charm.example.com",
+            "plugin": "dns-route53",
+            "propagation-seconds": 40}
         harness.update_config(self._config(harness.charm, **config))
         event = Mock(params={})
-        harness.charm._on_get_dns_route53_certificate_action(event)
+        harness.charm._on_get_certificate_action(event)
         self.assertEqual(len(charm._host.run.call_args_list), 2)
         expectCmd = [
             "certbot", "certonly", "-n", "--no-eff-email", "--dns-route53", "--agree-tos",
@@ -216,24 +226,6 @@ class TestCharm(unittest.TestCase):
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
                          ["RENEWED_LINEAGE"], "/etc/letsencrypt/live/charm.example.com")
-
-    def test_get_dns_route53_certificate_action_fail(self):
-        charm._host = Mock()
-        harness = Harness(charm.CertbotCharm)
-        self.addCleanup(harness.cleanup)
-        harness.begin()
-        harness.update_config(self._config(harness.charm))
-        event = Mock(params={
-            "agree-tos": True,
-            "aws-access-key-id": "test-key-id",
-            "aws-secret-access-key": "test-secret-key",
-            "domains": "action.example.com",
-            "email": "webmaster@action.example.com",
-            "propagation-seconds": 30})
-        charm._host.run.side_effect = subprocess.CalledProcessError(1, "certbot")
-        harness.charm._on_get_dns_route53_certificate_action(event)
-        event.fail.assert_called_once_with(
-            "cannot get certificate: Command 'certbot' returned non-zero exit status 1.")
 
     def test_get_certificate_no_plugin(self):
         charm._host = Mock()
@@ -297,6 +289,15 @@ class TestCharm(unittest.TestCase):
 
 
 class TestHost(unittest.TestCase):
+    def test_exists(self):
+        h = charm.Host()
+        with tempfile.TemporaryDirectory() as dir:
+            path = os.path.join(dir, "x")
+            self.assertFalse(h.exists(path))
+            with open(path, "w") as f:
+                f.write("x")
+            self.assertTrue(h.exists(path))
+
     def test_install_packages(self):
         h = charm.Host()
         h.run = Mock()

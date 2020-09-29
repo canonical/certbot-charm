@@ -34,12 +34,6 @@ options:
       access the DNS system. For details of this file please see
       https://certbot-dns-google.readthedocs.io/en/stable/#credentials
     type: string
-  dns-google-propagation-seconds:
-    default: 60
-    description: |
-      The number of seconds to wait for DNS to propagate before asking
-      the ACME server to verify the DNS record.
-    type: int
   dns-route53-aws-access-key-id:
     default: ""
     description: |
@@ -54,12 +48,6 @@ options:
       access to the DNS API. For details please see
       https://certbot-dns-route53.readthedocs.io/en/stable/#credentials
     type: string
-  dns-route53-propagation-seconds:
-    default: 60
-    description: |
-      The number of seconds to wait for DNS to propagate before asking
-      the ACME server to verify the DNS record.
-    type: int
   domains:
     default: ""
     description: |
@@ -87,3 +75,9 @@ options:
       ceritificate. The currently supported plugins are dns-google &
       dns-route53. 
     type: string
+  propagation-seconds:
+    default: 60
+    description: |
+      The number of seconds to wait for DNS to propagate before asking
+      the ACME server to verify the DNS record.
+    type: int

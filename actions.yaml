@@ -1,48 +1,7 @@
 # Copyright 2020 Canonical Ltd.
 # See LICENSE file for licensing details.
-get-dns-google-certificate:
-  description: Acquire a certificate using the dns-google plugin.
-  params:
-    agree-tos:
-      description: |
-        Agree to the terms-of-service. If using Let's Encrypt these can
-        be found at https://letsencrypt.org/repository/. If this is not
-        provided the value of agree-tos in the charm configuration will
-        be used.
-      type: boolean    
-    credentials:
-      description: |
-        Base64 encoded credential file used by the dns-google plugin to
-        access the DNS system. For details of this file please see
-        https://certbot-dns-google.readthedocs.io/en/stable/#credentials.
-        If this is not provided the value of dns-google-credentials in
-        the charm configuration will be used.
-      type: string
-    domains:
-      description: |
-        The domains to create the certificate for. This comma-separated
-        list contains all the domains to add to the certificate. The
-        first domain will be the subject of the certificate. Any
-        additional values will be added to the certificate as
-        alternative names. If this is not provided the value of domain
-        in the charm configuration will be used.
-      type: string
-    email:
-      description: |
-        Email address to register the certificates under. If this is not
-        provided the value of email in the charm configuration will be
-        used.
-      type: string
-    propagation-seconds:
-      description: |
-        The number of seconds to wait for DNS to propagate before asking
-        the ACME server to verify the DNS record. If this is not
-        provided the value of dns-google-propagation in the charm
-        configuration will be used.
-      type: integer
-
-get-dns-route53-certificate:
-  description: Acquire a certificate using the dns-google plugin.
+get-certificate:
+  description: Acquire a certificate from an ACME service.
   params:
     agree-tos:
       description: |
@@ -53,8 +12,8 @@ get-dns-route53-certificate:
       type: boolean
     aws-access-key-id:
       description: |
-        AWS_ACCESS_KEY_ID used to authenticate access to the DNS API.
-        For details please see
+        AWS_ACCESS_KEY_ID used to authenticate access to the DNS API
+        when using the dns-route53 plugin. For details please see
         https://certbot-dns-route53.readthedocs.io/en/stable/#credentials.
         If this is not provided the value of
         dns-route53-aws-access-key-id in the charm configuration will be
@@ -63,11 +22,19 @@ get-dns-route53-certificate:
     aws-secret-access-key:
       description: |
         AWS_SECRET_ACCESS_KEY used to authenticate access to the DNS
-        API. For details please see
+        API when using the dns-route53 plugin. For details please see
         https://certbot-dns-route53.readthedocs.io/en/stable/#credentials.
         If this is not provided the value of
         dns-route53-aws-secret-access-key in the charm configuration
         will be used.
+      type: string
+    credentials:
+      description: |
+        Base64 encoded credential file used by the plugin to access the
+        DNS API. The contents of this file will be plugin-specific, see
+        the <plugin-name>-credentials fields in the charm configuration
+        for more details. If this is not specified then the
+        plugin-specific field in the charm configuration will be used.
       type: string
     domains:
       description: |
@@ -84,10 +51,16 @@ get-dns-route53-certificate:
         provided the value of email in the charm configuration will be
         used.
       type: string
+    plugin:
+      description: |
+        Name of the plugin to use to acquire the certificate. If this is
+        not specified then the value of plugin in the charm
+        configuration will be used.
+      type: string
     propagation-seconds:
       description: |
         The number of seconds to wait for DNS to propagate before asking
-        the ACME server to verify the DNS record. If this is not
-        provided the value of dns-google-propagation in the charm
-        configuration will be used.
+        the ACME server to verify the DNS record, if appropriate. If
+        this is not provided the value of propagation-seconds in the
+        charm configuration will be used.
       type: integer
