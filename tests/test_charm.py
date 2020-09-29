@@ -43,7 +43,7 @@ class TestCharm(unittest.TestCase):
         }
         harness.update_config(self._config(harness.charm, **config))
         charm._host.write_config.assert_called_once()
-        args = charm._host.write_config.call_args.args
+        args = charm._host.write_config.call_args[0]
         self.assertEqual(args[0], "/etc/certbot-charm/config.ini")
         self.assertEqual(args[1], {
             'DEFAULT': {
