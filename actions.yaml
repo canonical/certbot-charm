@@ -9,7 +9,7 @@ deploy:
         domain on a certificate that has already been acquired by this
         unit.
       type: string
-    required: ["domain"]
+  required: ["domain"]
 
 get-certificate:
   description: Acquire a certificate from an ACME service.
