@@ -25,6 +25,7 @@ class TestCharm(unittest.TestCase):
         charm._host.install_packages.assert_called_once_with([
             "certbot",
             "python3-certbot-dns-google",
+            "python3-certbot-dns-rfc2136",
             "python3-certbot-dns-route53"])
         charm._host.symlink.assert_called_once_with(
             os.path.join(harness.charm.charm_dir, "bin/deploy.py"),
@@ -56,8 +57,10 @@ class TestCharm(unittest.TestCase):
                 'key-path': '/key/path'},
             'deploy': {
                 'command': '/bin/deploy'}})
-        charm._host.write_file.assert_called_once_with(
+        charm._host.write_file.assert_any_call(
             "/etc/certbot-charm/dns-google.json", b"", mode=0o600)
+        charm._host.write_file.assert_any_call(
+            "/etc/certbot-charm/dns-rfc2136.ini", b"", mode=0o600)
 
     def test_start_no_certificate(self):
         charm._host = Mock()
@@ -155,6 +158,61 @@ class TestCharm(unittest.TestCase):
                   "--email=webmaster@charm.example.com", "--domains=charm.example.com",
                   "--dns-google-credentials=/etc/certbot-charm/dns-google.json",
                   "--dns-google-propagation-seconds=40"], env=None))
+        self.assertEqual(charm._host.run.call_args_list[1][0], ([
+                         '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
+        self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
+                         ["RENEWED_LINEAGE"], "/etc/letsencrypt/live/charm.example.com")
+
+    def test_get_certificate_action_dns_rfc2136(self):
+        os.environ["JUJU_ACTION_UUID"] = "1"
+        charm._host = Mock()
+        harness = Harness(charm.CertbotCharm)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        harness.update_config(self._config(harness.charm))
+        event = Mock(params={
+            "agree-tos": True,
+            "credentials": "AAAA",
+            "domains": "action.example.com",
+            "email": "webmaster@action.example.com",
+            "propagation-seconds": 30,
+            "plugin": "dns-rfc2136"})
+        harness.charm._on_get_certificate_action(event)
+        self.assertEqual(len(charm._host.run.call_args_list), 2)
+        self.assertEqual(
+            charm._host.run.call_args_list[0],
+            call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-rfc2136", "--agree-tos",
+                  "--email=webmaster@action.example.com", "--domains=action.example.com",
+                  "--dns-rfc2136-credentials=/etc/certbot-charm/action-1.cred",
+                  "--dns-rfc2136-propagation-seconds=30"], env=None))
+        self.assertEqual(charm._host.run.call_args_list[1][0], ([
+                         '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
+        self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
+                         ["RENEWED_LINEAGE"], "/etc/letsencrypt/live/action.example.com")
+
+    def test_get_certificate_action_dns_rfc2136_defaults(self):
+        os.environ["JUJU_ACTION_UUID"] = "1"
+        charm._host = Mock()
+        harness = Harness(charm.CertbotCharm)
+        self.addCleanup(harness.cleanup)
+        harness.begin()
+        config = {
+            "agree-tos": True,
+            "dns-google-credentials": "AAAA",
+            "domains": "charm.example.com",
+            "email": "webmaster@charm.example.com",
+            "plugin": "dns-rfc2136",
+            "propagation-seconds": 40}
+        harness.update_config(self._config(harness.charm, **config))
+        event = Mock(params={})
+        harness.charm._on_get_certificate_action(event)
+        self.assertEqual(len(charm._host.run.call_args_list), 2)
+        self.assertEqual(
+            charm._host.run.call_args_list[0],
+            call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-rfc2136", "--agree-tos",
+                  "--email=webmaster@charm.example.com", "--domains=charm.example.com",
+                  "--dns-rfc2136-credentials=/etc/certbot-charm/dns-rfc2136.ini",
+                  "--dns-rfc2136-propagation-seconds=40"], env=None))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]

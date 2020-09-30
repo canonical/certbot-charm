@@ -33,6 +33,28 @@ $ juju run-action --wait certbot/0 get-certificate \
     plugin=dns-google
 ```
 
+### DNS-RFC2136 Plugin
+
+Certbot's dns-rfc2136 plugin uses the
+[RFC2136](https://tools.ietf.org/html/rfc2136) dynamic updates system
+to prove ownership of the requested domain. Documentation for the plugin
+can be found at https://certbot-dns-rfc2136.readthedocs.io/en/stable/.
+This plugin requires API credentials to be supplied either through the
+`credentials` parameter on the `get-certificate` action, or from the
+`dns-rfc2136-credentials` setting in the charm configuration.
+
+To acquire a certificate using this plugin run a command like the
+following:
+
+```
+$ juju run-action --wait certbot/0 get-certificate \
+    agree-tos=true \
+    credentials=`cat cred.ini | base64 -w0` \
+    domains=example.com \
+    email=webmaster@example.com \
+    plugin=dns-rfc2136
+```
+
 ### DNS-Route53 Plugin
 
 Certbot's dns-route53 plugin uses the AWS Route53 API to prove
@@ -55,6 +77,22 @@ $ juju run-action --wait certbot/0 get-certificate \
     domains=example.com \
     email=webmaster@example.com \
     plugin=dns-route53
+```
+
+## Updating Deploy Configuration
+
+Then the certificate deployment settings (`cert-path`, `chain-path`,
+`combined-path`, `deploy-command`, `fullchain-path` or `key-path`) are
+changed, those changes do not come into effect until either a new
+certificate is acquired or an existing certificate is renewed. To apply
+the changes to an existing certificate without waiting for a renewel use
+the `deploy` action.
+
+The `deploy` action requires a single parameter `domain` which is the
+primary domain in the certificate, for example:
+
+```
+$ juju run-action --wait certbot/0 deploy domain=example.com
 ```
 
 ## Integrating With Web-Servers
