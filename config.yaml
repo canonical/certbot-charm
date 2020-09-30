@@ -42,6 +42,13 @@ options:
       access the DNS system. For details of this file please see
       https://certbot-dns-google.readthedocs.io/en/stable/#credentials
     type: string
+  dns-rfc2136-credentials:
+    default: ""
+    description: |
+      Base64 encoded credential file used by the dns-rfc2136 plugin to
+      access the DNS system. For details of this file please see
+      https://certbot-dns-rfc2136.readthedocs.io/en/stable/#credentials
+    type: string
   dns-route53-aws-access-key-id:
     default: ""
     description: |
@@ -87,8 +94,8 @@ options:
     default: ""
     description: |
       The authenticator plugin to use to obtain (and renew) the
-      ceritificate. The currently supported plugins are dns-google &
-      dns-route53. 
+      ceritificate. The currently supported plugins are dns-google,
+      dns-rfc2136 & dns-route53. 
     type: string
   propagation-seconds:
     default: 60

@@ -41,6 +41,7 @@ class CertbotCharm(CharmBase):
         _host.install_packages([
             "certbot",
             "python3-certbot-dns-google",
+            "python3-certbot-dns-rfc2136",
             "python3-certbot-dns-route53"])
         _host.symlink(os.path.join(self.charm_dir, "bin/deploy.py"),
                       "/etc/letsencrypt/renewal-hooks/deploy/certbot-charm")
@@ -67,6 +68,11 @@ class CertbotCharm(CharmBase):
                                self.model.config["dns-google-credentials"])
         except (ValueError, binascii.Error):
             logger.exception("invalid dns-google-credentials value")
+        try:
+            self._write_base64(self._config_path("dns-rfc2136.ini"),
+                               self.model.config["dns-rfc2136-credentials"])
+        except (ValueError, binascii.Error):
+            logger.exception("invalid dns-rfc2136-credentials value")
 
     def _on_start(self, _):
         """Handler for the start hook."""
@@ -132,6 +138,21 @@ class CertbotCharm(CharmBase):
         return [
             "--dns-google-credentials={}".format(path),
             "--dns-google-propagation-seconds={}".format(propagation),
+        ], None
+
+    def _dns_rfc2136_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
+        """Calculate arguments for the dns-rfc2136 plugin.
+
+        Args:
+            params: Plugin-specific parameters that will be converted to
+              arguments or environment variables.
+        """
+        path = params.get("credentials-path", self._config_path("dns-rfc2136.ini"))
+        propagation = params.get("propagation-seconds",
+                                 self.model.config["propagation-seconds"])
+        return [
+            "--dns-rfc2136-credentials={}".format(path),
+            "--dns-rfc2136-propagation-seconds={}".format(propagation),
         ], None
 
     def _dns_route53_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
