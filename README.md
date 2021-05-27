@@ -108,7 +108,7 @@ The easiest way to use this charm with the
 configuration settings:
 
 ```
-combined-path: /ver/lib/haproxy/default.pem
+combined-path: /var/lib/haproxy/default.pem
 deploy-command: systemctl reload haproxy
 ```
 
