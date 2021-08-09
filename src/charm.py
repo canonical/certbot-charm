@@ -7,8 +7,9 @@ import binascii
 import configparser
 import logging
 import os
+import pathlib
 import subprocess
-from typing import Any, List, Mapping, Tuple
+from typing import Any, List, Mapping
 
 from ops.charm import CharmBase
 from ops.main import main
@@ -35,6 +36,7 @@ class CertbotCharm(CharmBase):
         self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.deploy_action, self._on_deploy_action)
         self.framework.observe(self.on.get_certificate_action, self._on_get_certificate_action)
+        self._aws_config_file = pathlib.Path.home().joinpath(".aws", "config")
 
     def _on_install(self, _):
         """Handler for the install hook."""
@@ -117,6 +119,7 @@ class CertbotCharm(CharmBase):
                                   params.get("domains", self.model.config["domains"]),
                                   params)
         except Exception as err:
+            logger.error("cannot get certificate: {}".format(err))
             event.fail("cannot get certificate: {}".format(err))
             # try and clean up any credentials as they won't be needed
             if _host.exists(credpath):
@@ -125,7 +128,7 @@ class CertbotCharm(CharmBase):
                 except Exception:
                     pass
 
-    def _dns_google_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
+    def _dns_google_args(self, params: dict) -> List[str]:
         """Calculate arguments for the dns-google plugin.
 
         Args:
@@ -138,9 +141,9 @@ class CertbotCharm(CharmBase):
         return [
             "--dns-google-credentials={}".format(path),
             "--dns-google-propagation-seconds={}".format(propagation),
-        ], None
+        ]
 
-    def _dns_rfc2136_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
+    def _dns_rfc2136_args(self, params: dict) -> List[str]:
         """Calculate arguments for the dns-rfc2136 plugin.
 
         Args:
@@ -153,9 +156,9 @@ class CertbotCharm(CharmBase):
         return [
             "--dns-rfc2136-credentials={}".format(path),
             "--dns-rfc2136-propagation-seconds={}".format(propagation),
-        ], None
+        ]
 
-    def _dns_route53_args(self, params: dict) -> Tuple[List[str], Mapping[str, str]]:
+    def _dns_route53_args(self, params: dict) -> List[str]:
         """Calculate arguments for the dns-route53 plugin.
 
         Args:
@@ -168,12 +171,24 @@ class CertbotCharm(CharmBase):
             "aws-access-key-id", self.model.config["dns-route53-aws-access-key-id"])
         aws_secret_access_key = params.get(
             "aws-secret-access-key", self.model.config["dns-route53-aws-secret-access-key"])
+
+        if aws_access_key_id and aws_secret_access_key:
+            config = configparser.ConfigParser()
+            config.read(self._aws_config_file)
+            try:
+                config.add_section("default")
+            except configparser.DuplicateSectionError:
+                pass
+            config.set("default", "aws_access_key_id", aws_access_key_id)
+            config.set("default", "aws_secret_access_key", aws_secret_access_key)
+            if not self._aws_config_file.parent.exists():
+                self._aws_config_file.parent.mkdir()
+            with open(self._aws_config_file, "w") as f:
+                config.write(f)
+
         return [
             "--dns-route53-propagation-seconds={}".format(propagation),
-        ], {
-            "AWS_ACCESS_KEY_ID": aws_access_key_id,
-            "AWS_SECRET_ACCESS_KEY": aws_secret_access_key,
-        }
+        ]
 
     def _get_certificate(self, plugin: str, agree_tos: bool, email: str, domains: str,
                          params: dict = {}) -> None:
@@ -197,11 +212,11 @@ class CertbotCharm(CharmBase):
 
         """
         try:
-            args, env = getattr(self, "_{}_args".format(plugin.replace("-", "_")))(params)
+            args = getattr(self, "_{}_args".format(plugin.replace("-", "_")))(params)
         except (AttributeError, TypeError):
             raise UnsupportedPluginError('plugin "{}" not supported'.format(plugin))
 
-        self._run_certbot(plugin, agree_tos, email, domains, args, env)
+        self._run_certbot(plugin, agree_tos, email, domains, args)
 
         domain = domains.split(",")[0]
         self._deploy(domain)
@@ -220,7 +235,7 @@ class CertbotCharm(CharmBase):
         _host.run(cmd, env=env)
 
     def _run_certbot(self, plugin: str, agree_tos: bool, email: str, domains: str,
-                     args: List[str] = None, env: Mapping[str, str] = None) -> None:
+                     args: List[str] = None) -> None:
         """Run the certbot command.
 
         Runs a non-interactive certbot certonly command.
@@ -232,7 +247,6 @@ class CertbotCharm(CharmBase):
             domains: Comma separated list of domains the certificate is for.
             args: Additional, plugin-specific, arguments to add to the
               certbot command.
-            env: Environment variables to set in the cerbot command.
         """
         cmd = ["certbot", "certonly", "-n", "--no-eff-email"]
         cmd.append("--{}".format(plugin))
@@ -244,7 +258,7 @@ class CertbotCharm(CharmBase):
             cmd.append("--domains={}".format(domains))
         if args:
             cmd.extend(args)
-        _host.run(cmd, env=env)
+        _host.run(cmd)
 
     def _config_path(self, filename: str) -> str:
         """Calculate the location where the charm's configuration files

@@ -3,6 +3,7 @@
 
 import configparser
 import os
+import pathlib
 import subprocess
 import tempfile
 import unittest
@@ -129,7 +130,7 @@ class TestCharm(unittest.TestCase):
             call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-google", "--agree-tos",
                   "--email=webmaster@action.example.com", "--domains=action.example.com",
                   "--dns-google-credentials=/etc/certbot-charm/action-1.cred",
-                  "--dns-google-propagation-seconds=30"], env=None))
+                  "--dns-google-propagation-seconds=30"]))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
@@ -157,7 +158,7 @@ class TestCharm(unittest.TestCase):
             call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-google", "--agree-tos",
                   "--email=webmaster@charm.example.com", "--domains=charm.example.com",
                   "--dns-google-credentials=/etc/certbot-charm/dns-google.json",
-                  "--dns-google-propagation-seconds=40"], env=None))
+                  "--dns-google-propagation-seconds=40"]))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
@@ -184,7 +185,7 @@ class TestCharm(unittest.TestCase):
             call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-rfc2136", "--agree-tos",
                   "--email=webmaster@action.example.com", "--domains=action.example.com",
                   "--dns-rfc2136-credentials=/etc/certbot-charm/action-1.cred",
-                  "--dns-rfc2136-propagation-seconds=30"], env=None))
+                  "--dns-rfc2136-propagation-seconds=30"]))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
@@ -212,7 +213,7 @@ class TestCharm(unittest.TestCase):
             call(["certbot", "certonly", "-n", "--no-eff-email", "--dns-rfc2136", "--agree-tos",
                   "--email=webmaster@charm.example.com", "--domains=charm.example.com",
                   "--dns-rfc2136-credentials=/etc/certbot-charm/dns-rfc2136.ini",
-                  "--dns-rfc2136-propagation-seconds=40"], env=None))
+                  "--dns-rfc2136-propagation-seconds=40"]))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
@@ -253,15 +254,21 @@ class TestCharm(unittest.TestCase):
             "email": "webmaster@action.example.com",
             "plugin": "dns-route53",
             "propagation-seconds": 30})
-        harness.charm._on_get_certificate_action(event)
-        self.assertEqual(len(charm._host.run.call_args_list), 2)
+
+        with tempfile.TemporaryDirectory() as dir:
+            harness.charm._aws_config_file = pathlib.Path(dir).joinpath(".aws", "config")
+            harness.charm._on_get_certificate_action(event)
+            awsconfig = configparser.ConfigParser()
+            awsconfig.read(harness.charm._aws_config_file)
+            self.assertEqual(awsconfig["default"]["aws_access_key_id"], "test-key-id")
+            self.assertEqual(awsconfig["default"]["aws_secret_access_key"], "test-secret-key")
+            self.assertEqual(len(charm._host.run.call_args_list), 2)
+
         expectCmd = [
             "certbot", "certonly", "-n", "--no-eff-email", "--dns-route53", "--agree-tos",
             "--email=webmaster@action.example.com", "--domains=action.example.com",
             "--dns-route53-propagation-seconds=30"]
-        expectEnv = {"AWS_ACCESS_KEY_ID": "test-key-id",
-                     "AWS_SECRET_ACCESS_KEY": "test-secret-key"}
-        self.assertEqual(charm._host.run.call_args_list[0], call(expectCmd, env=expectEnv))
+        self.assertEqual(charm._host.run.call_args_list[0], call(expectCmd))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
@@ -282,15 +289,22 @@ class TestCharm(unittest.TestCase):
             "propagation-seconds": 40}
         harness.update_config(self._config(harness.charm, **config))
         event = Mock(params={})
-        harness.charm._on_get_certificate_action(event)
+
+        with tempfile.TemporaryDirectory() as dir:
+            harness.charm._aws_config_file = pathlib.Path(dir).joinpath(".aws", "config")
+            harness.charm._on_get_certificate_action(event)
+            awsconfig = configparser.ConfigParser()
+            awsconfig.read(harness.charm._aws_config_file)
+            self.assertEqual(awsconfig["default"]["aws_access_key_id"], "test-key-id")
+            self.assertEqual(awsconfig["default"]["aws_secret_access_key"], "test-secret-key")
+            self.assertEqual(len(charm._host.run.call_args_list), 2)
+
         self.assertEqual(len(charm._host.run.call_args_list), 2)
         expectCmd = [
             "certbot", "certonly", "-n", "--no-eff-email", "--dns-route53", "--agree-tos",
             "--email=webmaster@charm.example.com", "--domains=charm.example.com",
             "--dns-route53-propagation-seconds=40"]
-        expectEnv = {"AWS_ACCESS_KEY_ID": "test-key-id",
-                     "AWS_SECRET_ACCESS_KEY": "test-secret-key"}
-        self.assertEqual(charm._host.run.call_args_list[0], call(expectCmd, env=expectEnv))
+        self.assertEqual(charm._host.run.call_args_list[0], call(expectCmd))
         self.assertEqual(charm._host.run.call_args_list[1][0], ([
                          '/etc/letsencrypt/renewal-hooks/deploy/certbot-charm'],))
         self.assertEqual(charm._host.run.call_args_list[1][1]["env"]
@@ -322,7 +336,7 @@ class TestCharm(unittest.TestCase):
         harness.update_config(self._config(harness.charm))
         harness.charm._run_certbot("test", False, "", "")
         charm._host.run.assert_called_once_with(
-            ["certbot", "certonly", "-n", "--no-eff-email", "--test"], env=None)
+            ["certbot", "certonly", "-n", "--no-eff-email", "--test"])
 
     def test_run_certbot_params(self):
         charm._host = Mock()
@@ -337,13 +351,12 @@ class TestCharm(unittest.TestCase):
         harness.charm._run_certbot(
             "test", True, "webmaster@params.example.com",
             "params.example.com,www.params.example.com",
-            ["--extra-1", "--extra-2"], {"ENV1": "e1", "ENV2": "e2"})
+            ["--extra-1", "--extra-2"])
         charm._host.run.assert_called_once_with(
             ["certbot", "certonly", "-n", "--no-eff-email", "--test", "--agree-tos",
              "--email=webmaster@params.example.com",
              "--domains=params.example.com,www.params.example.com",
-             "--extra-1", "--extra-2"],
-            env={"ENV1": "e1", "ENV2": "e2"})
+             "--extra-1", "--extra-2"])
 
     def _config(self, charm, **kwargs):
         config_path = charm.charm_dir / "config.yaml"
